@@ -8,11 +8,14 @@ import math
 import csv
 import multiprocessing
 
-POPULATION_SIZE = 750
-MUTATION_RATE = 0.2
-MAX_GEN = 1000
-CROSSOVER_RATE = 0.7
-NUM_RUNS = 50
+import itertools
+
+POPULATION_SIZE = 300
+MUTATION_RATE = 0.15
+MAX_GEN = 500
+CROSSOVER_RATE = 0.85
+NUM_RUNS = 100
+TOURNAMENT_SIZE = 3
 DIST_MATRIX = []
 
 def haversine_distance(index_1, index_2):
@@ -53,13 +56,13 @@ with open(file_path, 'r') as f:
             lon = float(parts[2])
             data_list.append((city, lat, lon))
 
-DIST_MATRIX = np.zeros((48, 48))
-for i in range(48):
-    for j in range(48):
+DIST_MATRIX = np.zeros((49, 49))
+for i in range(49):
+    for j in range(49):
         DIST_MATRIX[i][j] = haversine_distance(i, j)
 
 def create_individual():
-    cities = list(range(48))
+    cities = list(range(49))
 
     random.shuffle(cities)
 
@@ -69,16 +72,6 @@ if not hasattr(creator, "FitnessMin"):
     creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
 if not hasattr(creator, "Individual"):
     creator.create("Individual", list, fitness=creator.FitnessMin)
-
-def evaluate_distances(individual):
-    running_distance = 0
-    start_capital = individual[0]
-
-    for i in range(len(individual) - 1):
-        running_distance += haversine_distance(individual[i], individual[i + 1])
-    
-    running_distance += haversine_distance(start_capital, individual[len(individual) - 1])
-    return running_distance,
 
 def evaluate_distances(individual):
     dist = 0
@@ -97,11 +90,11 @@ toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 toolbox.register("evaluate", evaluate_distances)
 toolbox.register("mate", tools.cxOrdered)
 toolbox.register("mutate", tools.mutInversion)
-toolbox.register("select", tools.selTournament, tournsize=3)
+toolbox.register("select", tools.selTournament, tournsize=TOURNAMENT_SIZE)
 
-def run_one_experiment(run_id):
+def run_one_experiment(run_id, pop_size, max_gen, cx_rate, mut_rate):
     random.seed(run_id)
-    pop = toolbox.population(n=POPULATION_SIZE)
+    pop = toolbox.population(n=pop_size)
 
     fitnesses = list(toolbox.map(toolbox.evaluate, pop))
     for ind, fit in zip(pop, fitnesses):
@@ -111,7 +104,7 @@ def run_one_experiment(run_id):
     avg_fitness_history = []
     optimum_found_gen = None
 
-    for g in range(MAX_GEN):
+    for g in range(max_gen):
         fits = [ind.fitness.values[0] for ind in pop]
         current_best = min(fits)
         current_avg = sum(fits) / len(pop)
@@ -126,13 +119,13 @@ def run_one_experiment(run_id):
         offspring = list(map(toolbox.clone, offspring))
 
         for child1, child2 in zip(offspring[::2], offspring[1::2]):
-            if random.random() < CROSSOVER_RATE: 
+            if random.random() < cx_rate: 
                 toolbox.mate(child1, child2)
                 del child1.fitness.values
                 del child2.fitness.values
                 
         for mutant in offspring:
-            if random.random() < MUTATION_RATE:
+            if random.random() < mut_rate:
                 toolbox.mutate(mutant)
                 del mutant.fitness.values
 
@@ -145,6 +138,49 @@ def run_one_experiment(run_id):
         pop[0] = elite_clone
     best_ind = tools.selBest(pop, 1)[0]
     return best_fitness_history, avg_fitness_history, optimum_found_gen, best_ind
+def plot_route(best_ind, data_list):
+    # Generates and saves a map of the route based on Lats and Lons
+    lons = []
+    lats = []
+    
+    for idx in best_ind:
+        city, lat, lon = data_list[idx]
+        lons.append(lon)
+        lats.append(lat)
+        
+    lons.append(lons[0])
+    lats.append(lats[0])
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(lons, lats, marker='o', linestyle='-', color='b', markersize=5)
+    
+    plt.plot(lons[0], lats[0], marker='s', color='red', markersize=8, label='Start/End')
+    
+    plt.title("Best 48-City TSP Route Found")
+    plt.xlabel("Longitude")
+    plt.ylabel("Latitude")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("tsp_route_map.png")
+    plt.show()
+
+def plot_convergence(b_hist, a_hist):
+    # Generates and saves the fitness convergence graph
+    generations = range(len(b_hist))
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(generations, b_hist, label="Best Distance", color='red', linewidth=2)
+    plt.plot(generations, a_hist, label="Average Distance", color='blue', alpha=0.5)
+    
+    plt.title("GA Convergence over 500 Generations")
+    plt.xlabel("Generation")
+    plt.ylabel("Distance (Miles)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("convergence_plot.png") 
+    plt.show()
 
 def main():
     global DIST_MATRIX
@@ -154,27 +190,51 @@ def main():
 
     print(f"Starting {NUM_RUNS} runs...")
     
-    all_best_fitness = [] 
-    all_avg_fitness = []
-    all_optimum_gens = []
-    global_bests = []
-    best_ind = 0
-
-    for i in range(NUM_RUNS):
-        b_hist, a_hist, opt_gen, best_ind = run_one_experiment(i)
-        
-        all_best_fitness.append(b_hist)
-        all_avg_fitness.append(a_hist)
-        
-        global_bests.append(min(b_hist))
-        
-        if opt_gen is not None:
-            all_optimum_gens.append(opt_gen)
-            
-        if (i+1) % 10 == 0:
-            print(f"Run {i+1}/{NUM_RUNS} completed.")
+    pop_sizes = [500]
+    mut_rates = [0.15]
+    cx_rates = [0.7]
     
-    print(evaluate_distances(best_ind))
+    # Left over from previous grid search
+
+    test_configs = list(itertools.product(pop_sizes, mut_rates, cx_rates))
+
+    for p, m, c in test_configs:
+        print(f"\nTesting Config: Pop={p}, Mut={m}, CX={c}")
+        results = []
+        
+        overall_best_dist = float('inf')
+        overall_best_ind = None
+        overall_best_b_hist = None
+        overall_best_a_hist = None
+
+        for i in range(NUM_RUNS):
+            b_hist, a_hist, opt_gen, best_ind = run_one_experiment(i, p, 500, c, m)
+            
+            current_dist = best_ind.fitness.values[0]
+            results.append(current_dist)
+            
+            if current_dist < overall_best_dist:
+                overall_best_dist = current_dist
+                overall_best_ind = best_ind
+                overall_best_b_hist = b_hist
+                overall_best_a_hist = a_hist
+                
+            if (i+1) % 10 == 0:
+                print(f"Run {i+1}/{NUM_RUNS} completed.")
+                
+        avg_of_runs = sum(results) / len(results)
+        print(f"Average Best Fitness for this config: {avg_of_runs:.2f}")
+        print(f"Absolute Best Fitness Found: {overall_best_dist:.2f}")
+    
+    pool.close()
+
+    print("\nBest Route Discovered:")
+    best_route_cities = [data_list[idx][0] for idx in overall_best_ind]
+    print(" -> ".join(best_route_cities) + " -> " + best_route_cities[0])
+    
+    print("\nGenerating charts...")
+    plot_route(overall_best_ind, data_list)
+    plot_convergence(overall_best_b_hist, overall_best_a_hist)
 
 if __name__ == "__main__":
     main()
