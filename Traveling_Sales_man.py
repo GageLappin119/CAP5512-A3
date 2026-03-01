@@ -56,13 +56,14 @@ with open(file_path, 'r') as f:
             lon = float(parts[2])
             data_list.append((city, lat, lon))
 
-DIST_MATRIX = np.zeros((49, 49))
-for i in range(49):
-    for j in range(49):
+NUM_CITIES = 49
+DIST_MATRIX = np.zeros((NUM_CITIES, NUM_CITIES))
+for i in range(NUM_CITIES):
+    for j in range(NUM_CITIES):
         DIST_MATRIX[i][j] = haversine_distance(i, j)
 
 def create_individual():
-    cities = list(range(49))
+    cities = list(range(NUM_CITIES - 1))
 
     random.shuffle(cities)
 
@@ -75,9 +76,10 @@ if not hasattr(creator, "Individual"):
 
 def evaluate_distances(individual):
     dist = 0
+    dist += DIST_MATRIX[NUM_CITIES - 1][individual[0]]
     for i in range(len(individual) - 1):
         dist += DIST_MATRIX[individual[i]][individual[i+1]]
-    dist += DIST_MATRIX[individual[0]][individual[len(individual) - 1]]
+    dist += DIST_MATRIX[NUM_CITIES - 1][individual[len(individual) - 1]]
     return dist,
 
 def reverse_list(individual, indpb):
@@ -142,6 +144,10 @@ def plot_route(best_ind, data_list):
     # Generates and saves a map of the route based on Lats and Lons
     lons = []
     lats = []
+
+    city, lat, lon = data_list[NUM_CITIES - 1]
+    lons.append(lon)
+    lats.append(lat)
     
     for idx in best_ind:
         city, lat, lon = data_list[idx]
@@ -185,9 +191,6 @@ def plot_convergence(b_hist, a_hist):
 def main():
     global DIST_MATRIX
 
-    pool = multiprocessing.Pool()
-    toolbox.register("map", pool.map)
-
     print(f"Starting {NUM_RUNS} runs...")
     
     pop_sizes = [500]
@@ -226,10 +229,8 @@ def main():
         print(f"Average Best Fitness for this config: {avg_of_runs:.2f}")
         print(f"Absolute Best Fitness Found: {overall_best_dist:.2f}")
     
-    pool.close()
-
     print("\nBest Route Discovered:")
-    best_route_cities = [data_list[idx][0] for idx in overall_best_ind]
+    best_route_cities = [data_list[idx][0] for idx in [NUM_CITIES - 1] + list(overall_best_ind)]
     print(" -> ".join(best_route_cities) + " -> " + best_route_cities[0])
     
     print("\nGenerating charts...")
