@@ -226,6 +226,8 @@ def main():
         avg_of_runs = sum(results) / len(results)
         print(f"Average Best Fitness for this config: {avg_of_runs:.2f}")
         print(f"Absolute Best Fitness Found: {overall_best_dist:.2f}")
+    
+    pool.close()
 
     print("\nBest Route Discovered:")
     best_route_cities = [data_list[idx][0] for idx in [NUM_CITIES - 1] + list(overall_best_ind)]
