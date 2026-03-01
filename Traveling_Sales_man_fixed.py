@@ -5,8 +5,6 @@ from deap import base
 from deap import creator
 from deap import tools
 import math
-import csv
-import multiprocessing
 
 import itertools
 
@@ -191,9 +189,6 @@ def plot_convergence(b_hist, a_hist):
 def main():
     global DIST_MATRIX
 
-    pool = multiprocessing.Pool()
-    toolbox.register("map", pool.map)
-
     print(f"Starting {NUM_RUNS} runs...")
     
     pop_sizes = [500]
@@ -231,8 +226,6 @@ def main():
         avg_of_runs = sum(results) / len(results)
         print(f"Average Best Fitness for this config: {avg_of_runs:.2f}")
         print(f"Absolute Best Fitness Found: {overall_best_dist:.2f}")
-    
-    pool.close()
 
     print("\nBest Route Discovered:")
     best_route_cities = [data_list[idx][0] for idx in [NUM_CITIES - 1] + list(overall_best_ind)]
